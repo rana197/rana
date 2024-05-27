@@ -47,7 +47,12 @@ inputSize = 4; % Assuming the state is represented by 3 values(W_distance, W_loa
 outputSize = 50; %Set of actions    // needs to be changed 10
 net = createDeepQNetwork(inputSize, outputSize);        % Creating a Deep Q Network(called net)
 
-episodes = 1; %100
+% Initialize the target network
+targetNet = net; % Initialize target network
+targetUpdateFrequency = 10; % Frequency to update the target network
+target_update_count = 0;
+
+episodes = 2; %100
 gamma = 0.9; % Discount factor
 epsilon = 0.5; % Exploration rate
 alpha = 0.001; % Learning rate = or 0.01;
@@ -61,7 +66,7 @@ for episode = 1:episodes
 
     while (count <= 10)        %100
         disp("current count: " + count);
-        state = [W_d_index, W_l_index, W_ec_index, W_p_index];
+        state = [W_d_index, W_l_index, W_ec_index, W_p_index]; % this are the indexes of weights of distance from the server, server load, server energy consumption and server computing capacity
 
         predicted_action = Get_Predicted_Action(net,state, epsilon);
 
@@ -77,7 +82,8 @@ for episode = 1:episodes
         next_State = [new_W_d_Index new_W_l_Index new_W_ec_Index, new_W_p_Index];
         next_State_T = next_State';                                         % Transpose the state to make ready for DQN input.
         new_state_DL = dlarray(next_State_T, 'CB');                         % Converting the input(=nextState) into 
-        next_Q_predict = predict(net, new_state_DL);                      % Exploit: Use the network to predict next Q-values
+        %next_Q_predict = predict(net, new_state_DL);                      % Exploit: Use the network to predict next Q-values
+        next_Q_predict = predict(targetNet, new_state_DL);                  % Use the target network to predict next Q-values
         % also need to assign "- infinity" to rejected actions for the next_State as well
         % add code here
         target_Q = new_index_reward + gamma * max(next_Q_predict, [], 1); % gamma is the discount factor, which represents the importance of future rewards relative to immediate rewards.
@@ -128,8 +134,17 @@ for episode = 1:episodes
         W_l_index = new_W_l_Index;
         W_ec_index = new_W_ec_Index;
         W_p_index = new_W_p_Index;
-
+        disp("Updating count...");
         count = count +1;
+        disp(count)
+    end
+
+    % Update the target network periodically
+    %if mod(episode, targetUpdateFrequency) == 0
+    if mod((count-1), targetUpdateFrequency) == 0
+        disp("Updating the target network...");
+        targetNet = net;
+        target_update_count =target_update_count+1;
     end
 end
 % Stop capturing the output
@@ -500,7 +515,7 @@ function predicted_action = Get_Predicted_Action(net,state, epsilon)
             disp(rejected_Actions)
             state = state';                                % Transpose the state to make ready for DQN input.
             state_DL = dlarray(state, 'CB');               % Converting the input(=state) into 
-            Q_predict = predict(net, state_DL);            % Exploit: Use the network to predict Q-values
+            Q_predict = predict(targetNet, state_DL);            % Exploit: Use the network to predict Q-values
             Q_predict(rejected_Actions)=-inf;              % Initializing rejected_Actions as -Infinity.            
             
             % Check if all elements in Q_predict are -Inf
@@ -850,4 +865,3 @@ function [loss, gradients] = modelGradients(net, states, targets, actions, miniB
     %loss = [0.3087 0.3087];
     gradients = dlgradient(loss, net.Learnables);
 end
-
